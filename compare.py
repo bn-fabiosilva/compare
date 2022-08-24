@@ -1,4 +1,5 @@
 from argparse import ArgumentParser
+from csv import reader
 import sys 
 import gc
 import os
@@ -15,7 +16,18 @@ parser.add_argument("-o", "--original", dest="original", help="Nome do arquivo o
 parser.add_argument("-n", "--novo", dest="novo", help="Nome do arquivo novo", metavar="NOVO")
 parser.add_argument("-d", "--delimiter", dest="delimiter", help="Delimitador do arquivo", metavar="DELIMITER")
 parser.add_argument("-e", "--encoding", dest="encoding", help="Charset do arquivo", metavar="ENCODING")
+parser.add_argument("-c", "--chunksize", dest="chunksize", help="Chuncksize de abertura dos csv", metavar="CHUNKSIZE")
 args = parser.parse_args()
+
+# Padroes parametros opcionais
+if args.delimiter == None:
+  args.delimiter = ";"
+
+if args.encoding == None:
+  args.encoding = "utf-8"
+
+if args.chunksize == None:
+  args.chunksize = 1000000
 
 # Funcoes
 def checkFileHash(file):
@@ -32,22 +44,26 @@ def hashLine(row):
 def listComprehension(df):
   return pd.Series([ hashLine(row) for row in df.to_numpy() ])
 
+print('--- %s seconds --- Iniciando processo...' % (time.time() - start_time))
+
 # Incio
 # Validacao nomes dos arquivos para comparacao
 if args.original == None or args.novo == None: 
-  print("B1. Necessario informar os nomes dos arquivos a serem comparados.")
+  print("E1. Necessario informar os nomes dos arquivos a serem comparados.")
   print("Execução interrompida.")
   print("--- %s seconds ---" % (time.time() - start_time))
   sys.exit()
 
 # Valida se o conteudo dos arquivos sao iguais
+print('--- %s seconds --- Validando se o conteudo dos arquivo sao iguais...' % (time.time() - start_time))
 if checkFileHash(args.original) == checkFileHash(args.novo):
-  print("B2. O conteudo dos arquivos sao identicos.")
+  print("E2. O conteudo dos arquivos sao identicos.")
   print("Execução interrompida.")
   print("--- %s seconds ---" % (time.time() - start_time))
   sys.exit()
 
 # Valida primeira linha entre os arquivos
+print('--- %s seconds --- Validando se o cabecalho dos arquivos sao iguais...' % (time.time() - start_time))
 with open(args.original) as f:
   first_line_original = f.readline()
 with open(args.novo) as f:
@@ -59,46 +75,42 @@ if first_line_original != first_line_novo:
   print("--- %s seconds ---" % (time.time() - start_time))
   sys.exit()
 
-# Padroes parametros opcionais
-if args.delimiter == None:
-  args.delimiter = ";"
-
-if args.encoding == None:
-  args.encoding = "utf-8"
-
-print('--- %s seconds --- Iniciando processo...' % (time.time() - start_time))
-
 # Estrutura para gerar o arquivo com as linhas diferentes do arquivo original
-df_original = pd.read_csv(args.original, dtype=str, delimiter=args.delimiter, encoding=args.encoding)
-df_original['HASH_$DEL'] = listComprehension(df_original)
-
-df_columns = [c for c in df_original.columns if c != 'HASH_$DEL']
-df_original.drop(df_columns, axis=1, inplace=True)
-
-df_original.to_csv('temp_original.csv', index=False)
+print('--- %s seconds --- Abrindo arquivo original...' % (time.time() - start_time))
+ls_temp_hash = []
+with pd.read_csv(args.original, dtype=str, delimiter=args.delimiter, encoding=args.encoding, chunksize=args.chunksize) as reader:
+  reader
+  for chunk in reader:
+    df_original = chunk
+    ls_temp_hash.append(listComprehension(df_original))
 del(df_original)
 gc.collect()
 
-df_novo = pd.read_csv(args.novo, dtype=str, delimiter=args.delimiter, encoding=args.encoding)
-df_novo['HASH_$DEL'] = listComprehension(df_novo)
+print('--- %s seconds --- Gerando temp de hash do arquivo origial...' % (time.time() - start_time))
+ls_temp_hash = [item for sublist in ls_temp_hash for item in sublist]
+df_original_hash = pd.DataFrame(ls_temp_hash, columns=['HASH_$DEL'])
+df_original_hash.set_index('HASH_$DEL', inplace=True)
+df_original_hash.sort_index(inplace=True)
 
-df_original = pd.read_csv('temp_original.csv', delimiter=args.delimiter, encoding=args.encoding)
+print('--- %s seconds --- Gerando cabecalho do arquivo de output...' % (time.time() - start_time))
+if os.path.exists("Output.csv"):
+  os.remove("Output.csv")
+with open("Output.csv", "w") as text_file:
+    text_file.write(first_line_novo)
 
-df_original.set_index('HASH_$DEL', inplace=True)
-df_original.sort_index(inplace=True)
-df_novo.set_index('HASH_$DEL', inplace=True)
-
-df_diff = df_novo[~df_novo.index.isin(df_original.index)]
-
-del(df_novo)
-del(df_original)
-gc.collect()
-
-df_diff = df_diff[[c for c in df_diff.columns if not c.endswith('_$DEL')]]
-df_diff.to_csv('Output.csv', index=False)
-
-if os.path.exists("temp_original.csv"):
-  os.remove("temp_original.csv")
+print('--- %s seconds --- Abrindo arquivo novo gerando output das diferencas...' % (time.time() - start_time))
+ls_temp_hash = []
+with pd.read_csv(args.novo, dtype=str, delimiter=args.delimiter, encoding=args.encoding, chunksize=args.chunksize) as reader:
+  reader
+  for chunk in reader:
+    df_novo = chunk
+    df_novo.reset_index(inplace=True, drop=True)
+    df_novo['HASH_$DEL'] = listComprehension(df_novo)
+    df_novo.set_index('HASH_$DEL', inplace=True)
+    df_novo.sort_index(inplace=True)
+    df_diff = df_novo[~df_novo.index.isin(df_original_hash.index)]
+    df_diff = df_diff[[c for c in df_diff.columns if not c.endswith('_$DEL')]]
+    df_diff.to_csv('Output.csv', index=False, mode='a', header=False)
 
 print('--- %s seconds --- Processo concluido!!!' % (time.time() - start_time))
 sys.exit()
