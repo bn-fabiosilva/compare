@@ -72,7 +72,7 @@ with open(args.novo) as f:
   first_line_novo = f.readline()
 
 if first_line_original != first_line_novo:
-  print("B3. O cabecalho dos arquivos sao diferentes.")
+  print("E3. O cabecalho dos arquivos sao diferentes.")
   print("Execução interrompida.")
   print("--- %s seconds ---" % (time.time() - start_time))
   sys.exit()
