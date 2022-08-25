@@ -43,7 +43,7 @@ def hashLine(row):
   row = " ".join(str(x) for x in row)
   return zlib.adler32(row.encode())
 
-def listComprehension(df):
+def listCompDataFrame(df):
   return pd.Series([ hashLine(row) for row in df.to_numpy() ])
 
 print('--- %s seconds --- Iniciando processo...' % (time.time() - start_time))
@@ -85,7 +85,7 @@ with pd.read_csv(args.original, dtype=str, delimiter=args.delimiter, encoding=ar
   reader
   for chunk in reader:
     df_original = chunk
-    ls_temp_hash = listComprehension(df_original)
+    ls_temp_hash = listCompDataFrame(df_original)
     df_hash = pd.concat([df_hash, ls_temp_hash], axis=0, ignore_index=True)
 del(df_original)
 gc.collect()
@@ -107,7 +107,7 @@ with pd.read_csv(args.novo, dtype=str, delimiter=args.delimiter, encoding=args.e
   for chunk in reader:
     df_novo = chunk
     df_novo.reset_index(inplace=True, drop=True)
-    df_novo['HASH_$DEL'] = listComprehension(df_novo)
+    df_novo['HASH_$DEL'] = listCompDataFrame(df_novo)
     df_novo.set_index('HASH_$DEL', inplace=True)
     #df_novo.sort_index(inplace=True)
     df_diff = df_novo[~df_novo.index.isin(df_hash.index)]
