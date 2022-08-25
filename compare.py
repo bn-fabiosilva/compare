@@ -76,21 +76,21 @@ if first_line_original != first_line_novo:
   sys.exit()
 
 # Estrutura para gerar o arquivo com as linhas diferentes do arquivo original
-print('--- %s seconds --- Abrindo arquivo original...' % (time.time() - start_time))
+print('--- %s seconds --- Abrindo arquivo original e gerando hash...' % (time.time() - start_time))
 ls_temp_hash = []
+df_hash = pd.DataFrame(ls_temp_hash, dtype=int)
 with pd.read_csv(args.original, dtype=str, delimiter=args.delimiter, encoding=args.encoding, chunksize=args.chunksize) as reader:
   reader
   for chunk in reader:
     df_original = chunk
-    ls_temp_hash.append(listComprehension(df_original))
+    ls_temp_hash = listComprehension(df_original)
+    df_hash = pd.concat([df_hash, ls_temp_hash], axis=0, ignore_index=True)
 del(df_original)
 gc.collect()
 
-print('--- %s seconds --- Gerando temp de hash do arquivo origial...' % (time.time() - start_time))
-ls_temp_hash = [item for sublist in ls_temp_hash for item in sublist]
-df_original_hash = pd.DataFrame(ls_temp_hash, columns=['HASH_$DEL'])
-df_original_hash.set_index('HASH_$DEL', inplace=True)
-df_original_hash.sort_index(inplace=True)
+print('--- %s seconds --- Ordenando hash...' % (time.time() - start_time))
+df_hash.set_index(0, inplace=True)
+df_hash.sort_index(inplace=True)
 
 print('--- %s seconds --- Gerando cabecalho do arquivo de output...' % (time.time() - start_time))
 if os.path.exists("Output.csv"):
@@ -98,7 +98,7 @@ if os.path.exists("Output.csv"):
 with open("Output.csv", "w") as text_file:
     text_file.write(first_line_novo)
 
-print('--- %s seconds --- Abrindo arquivo novo gerando output das diferencas...' % (time.time() - start_time))
+print('--- %s seconds --- Abrindo arquivo novo e gerando output das diferencas...' % (time.time() - start_time))
 ls_temp_hash = []
 with pd.read_csv(args.novo, dtype=str, delimiter=args.delimiter, encoding=args.encoding, chunksize=args.chunksize) as reader:
   reader
@@ -108,7 +108,7 @@ with pd.read_csv(args.novo, dtype=str, delimiter=args.delimiter, encoding=args.e
     df_novo['HASH_$DEL'] = listComprehension(df_novo)
     df_novo.set_index('HASH_$DEL', inplace=True)
     df_novo.sort_index(inplace=True)
-    df_diff = df_novo[~df_novo.index.isin(df_original_hash.index)]
+    df_diff = df_novo[~df_novo.index.isin(df_hash.index)]
     df_diff = df_diff[[c for c in df_diff.columns if not c.endswith('_$DEL')]]
     df_diff.to_csv('Output.csv', index=False, mode='a', header=False)
 
