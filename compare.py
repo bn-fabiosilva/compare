@@ -12,6 +12,7 @@ start_time = time.time()
 
 # Argumentos execucao
 parser = ArgumentParser()
+parser.add_argument("-p", "--path", dest="path", help="Path para a pasta dos arquivos.", metavar="PATH")
 parser.add_argument("-o", "--original", dest="original", help="Nome do arquivo original", metavar="ORIGINAL")
 parser.add_argument("-n", "--novo", dest="novo", help="Nome do arquivo novo", metavar="NOVO")
 parser.add_argument("-d", "--delimiter", dest="delimiter", help="Delimitador do arquivo", metavar="DELIMITER")
@@ -50,15 +51,17 @@ print('--- %s seconds --- Iniciando processo...' % (time.time() - start_time))
 
 # Incio
 # Validacao nomes dos arquivos para comparacao
-if args.original == None or args.novo == None: 
+if args.path == None or args.original == None or args.novo == None: 
   print("E1. Necessario informar os nomes dos arquivos a serem comparados.")
   print("Execução interrompida.")
   print("--- %s seconds ---" % (time.time() - start_time))
   sys.exit()
 
 # Valida se o conteudo dos arquivos sao iguais
+path_original = args.path+"\\"+args.original
+path_novo = args.path+"\\"+args.novo
 print('--- %s seconds --- Validando se o conteudo dos arquivo sao iguais...' % (time.time() - start_time))
-if checkFileHash(args.original) == checkFileHash(args.novo):
+if checkFileHash(path_original) == checkFileHash(path_novo):
   print("E2. O conteudo dos arquivos sao identicos.")
   print("Execução interrompida.")
   print("--- %s seconds ---" % (time.time() - start_time))
@@ -66,9 +69,9 @@ if checkFileHash(args.original) == checkFileHash(args.novo):
 
 # Valida primeira linha entre os arquivos
 print('--- %s seconds --- Validando se o cabecalho dos arquivos sao iguais...' % (time.time() - start_time))
-with open(args.original) as f:
+with open(path_original) as f:
   first_line_original = f.readline()
-with open(args.novo) as f:
+with open(path_novo) as f:
   first_line_novo = f.readline()
 
 if first_line_original != first_line_novo:
@@ -81,7 +84,7 @@ if first_line_original != first_line_novo:
 print('--- %s seconds --- Abrindo arquivo original e gerando hash...' % (time.time() - start_time))
 ls_temp_hash = []
 df_hash = pd.DataFrame(ls_temp_hash, dtype=int)
-with pd.read_csv(args.original, dtype=str, delimiter=args.delimiter, encoding=args.encoding, chunksize=args.chunksize) as reader:
+with pd.read_csv(path_original, dtype=str, delimiter=args.delimiter, encoding=args.encoding, chunksize=args.chunksize) as reader:
   reader
   for chunk in reader:
     df_original = chunk
@@ -95,14 +98,15 @@ df_hash.set_index(0, inplace=True)
 #df_hash.sort_index(inplace=True)
 
 print('--- %s seconds --- Gerando cabecalho do arquivo de output...' % (time.time() - start_time))
-if os.path.exists("Output.csv"):
-  os.remove("Output.csv")
-with open("Output.csv", "w") as text_file:
+path_output = args.path+"\Output\Arquivo_Output.csv"
+if os.path.exists(path_output):
+  os.remove(path_output)
+with open(path_output, "w") as text_file:
   text_file.write(first_line_novo)
 
 print('--- %s seconds --- Abrindo arquivo novo e gerando output das diferencas...' % (time.time() - start_time))
 ls_temp_hash = []
-with pd.read_csv(args.novo, dtype=str, delimiter=args.delimiter, encoding=args.encoding, chunksize=args.chunksize) as reader:
+with pd.read_csv(path_novo, dtype=str, delimiter=args.delimiter, encoding=args.encoding, chunksize=args.chunksize) as reader:
   reader
   for chunk in reader:
     df_novo = chunk
@@ -112,7 +116,7 @@ with pd.read_csv(args.novo, dtype=str, delimiter=args.delimiter, encoding=args.e
     #df_novo.sort_index(inplace=True)
     df_diff = df_novo[~df_novo.index.isin(df_hash.index)]
     df_diff = df_diff[[c for c in df_diff.columns if not c.endswith('_$DEL')]]
-    df_diff.to_csv('Output.csv', index=False, mode='a', header=False)
+    df_diff.to_csv(path_output, index=False, mode='a', header=False)
 
 print('--- %s seconds --- Processo concluido!!!' % (time.time() - start_time))
 sys.exit()
